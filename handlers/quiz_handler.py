@@ -60,10 +60,19 @@ async def quiz_master(ctx, recruit=False):
     else:
         selected_quizzes = random.sample(quizzes, min(10, len(quizzes)))  # ランダムに10問選択
 
-    timeout = 60 if len(participants_list) == 1 else 20  # タイムアタックの場合は60秒、それ以外は20秒
-    start_time = time.time() if len(participants_list) == 1 else None
-
+    if len(participants_list) == 1: #基準時間の設定
+        Reference_time =60
+    else:
+        Reference_time =20
+    
+    timeout = 60# タイムアタックの場合は60秒
+    start_time = time.time()
     for i, quiz in enumerate(selected_quizzes, start=1):
+
+        if len(participants_list) != 1:
+            timeout = 20  # タイムアタック以外の場合クイズごとに初期化
+            start_time = time.time() # タイムアタック以外の場合クイズごとに初期化
+        
 
         if not is_quiz_running or skip_quiz_flag:
             skip_quiz_flag = False  # スキップフラグをリセット
@@ -78,14 +87,14 @@ async def quiz_master(ctx, recruit=False):
 
         while correct_answers < required_correct_answers and timeout > 0:
             try:
-                # タイムアタックモードの場合、経過時間を計算してtimeoutを更新
-                if len(participants_list) == 1:
-                    elapsed_time = time.time() - start_time
-                    timeout = 60 - elapsed_time
-                    if timeout <= 0:
-                        raise asyncio.TimeoutError  # タイムアウトを強制的に発生させる
-                
+                # 経過時間を計算してtimeoutを更新
+                elapsed_time = time.time() - start_time
+                timeout = Reference_time - elapsed_time
                 wait_for_message_task = asyncio.create_task(ctx.bot.wait_for('message', check=check, timeout=timeout))
+                if timeout <= 0:
+                    raise asyncio.TimeoutError  # タイムアウトを強制的に発生させる
+                
+                # wait_for_message_task = asyncio.create_task(ctx.bot.wait_for('message', check=check, timeout=timeout))
                 done, pending = await asyncio.wait({wait_for_message_task}, return_when=asyncio.FIRST_COMPLETED)
 
                 if not is_quiz_running or skip_quiz_flag:
@@ -117,6 +126,10 @@ async def quiz_master(ctx, recruit=False):
                         if correct_answers < 1:
                             await ctx.send(f"時間切れです！正解は {quiz['answers']} でした。")
                 break  # 制限時間が経過したら次のクイズへ
+
+            # タスクが未完了の場合はキャンセル
+            for task in pending:
+                task.cancel()
 
     is_quiz_running = False
     # クイズ終了後、正解数を提示
